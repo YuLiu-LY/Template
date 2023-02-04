@@ -1,0 +1,14 @@
+keras
+matplotlib
+numpy
+pandas
+Pillow
+pycocotools
+pyforge
+scikit_learn
+timm
+tqdm
+wandb
+opencv-python
+scikit-image
+pytorch_lightning
