@@ -1,4 +1,10 @@
 import os
+import sys
+root_path = os.path.abspath(__file__)
+root_path = '/'.join(root_path.split('/')[:-2])
+sys.path.append(root_path)
+
+import os
 import json
 import torch
 import pytorch_lightning as pl
@@ -9,6 +15,7 @@ from typing import Tuple
 from pycocotools.mask import decode
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import transforms
+from data.datasets import register
 
 
 class PTRDataset(Dataset):
@@ -95,6 +102,7 @@ class PTRDataset(Dataset):
         return scene_paths, img_paths
     
     
+@register('ptr')
 class PTRDataModule(pl.LightningDataModule):
     def __init__(
         self,

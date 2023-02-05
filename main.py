@@ -17,18 +17,8 @@ import argparse
 import json
 import yaml
 
-from data.birds_dataset import BirdsDataModule
-from data.ptr_dataset import PTRDataModule
-from data.clevr_dataset import CLEVRDataModule
-from data.voc_dataset import VOCDataModule
+from data.datasets import make_datamodule
 
-
-datamodules = {
-    'birds': BirdsDataModule,
-    'ptr': PTRDataModule,
-    'clevr': CLEVRDataModule,
-    'voc': VOCDataModule,
-}
 
 monitors = {
     'iou': 'avg_IoU',
@@ -110,7 +100,7 @@ def main(args):
     os.environ["CUDA_VISIBLE_DEVICES"] = args.devices
 
     args.monitor = monitors[args.evaluator]
-    datamodule = datamodules[args.dataset](args)
+    datamodule = make_datamodule(args)
     model = Dinosaur(args)
     if args.job_type == 'test':
         model.load_state_dict(state_dict_ckpt(args.ckpt_path))

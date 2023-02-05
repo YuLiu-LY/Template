@@ -1,4 +1,10 @@
 import os
+import sys
+root_path = os.path.abspath(__file__)
+root_path = '/'.join(root_path.split('/')[:-2])
+sys.path.append(root_path)
+
+import os
 import torch
 import pytorch_lightning as pl
 from PIL import Image
@@ -8,6 +14,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from torchvision.transforms import transforms
 from torchvision.transforms import InterpolationMode
+from data.datasets import register
 
 
 class VOCDataset(Dataset):
@@ -83,6 +90,7 @@ class VOCDataset(Dataset):
         return len(self.images)
 
 
+@register('voc')
 class VOCDataModule(pl.LightningDataModule):
     def __init__(
         self,

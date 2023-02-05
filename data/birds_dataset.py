@@ -1,5 +1,9 @@
 import os
 import sys
+root_path = os.path.abspath(__file__)
+root_path = '/'.join(root_path.split('/')[:-2])
+sys.path.append(root_path)
+
 from typing import Tuple
 import numpy as np
 import pandas as pd
@@ -10,6 +14,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from torchvision.transforms import transforms
 from torchvision.transforms import InterpolationMode
+from data.datasets import register
 
 
 class CubDataset(Dataset):
@@ -163,6 +168,7 @@ class CubDataset(Dataset):
                 yield item
 
 
+@register('birds')
 class BirdsDataModule(pl.LightningDataModule):
     def __init__(
         self,
@@ -213,6 +219,7 @@ class BirdsDataModule(pl.LightningDataModule):
             pin_memory=True,
         )
 
+
 '''test'''
 if __name__ == '__main__':
     import argparse
@@ -221,7 +228,7 @@ if __name__ == '__main__':
     args.data_root = '/home/yuliu/Dataset/Birds'
     args.use_rescale = False
     args.batch_size = 40
-    args.num_workers = 4
+    args.num_workers = 0
     args.resolution = 128, 128
 
     datamodule = BirdsDataModule(args)
@@ -231,6 +238,6 @@ if __name__ == '__main__':
     it = iter(dl)
     batch = next(it)
     batch_img, batch_masks = batch['image'], batch['mask']
-    # print(batch_img.shape, batch_masks.shape)
+    print(batch_img.shape, batch_masks.shape)
     # print(batch_masks[0, 0, :32, :32])
 
