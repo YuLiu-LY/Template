@@ -5,4 +5,5 @@ python main.py \
     --name 'test' \
     --enable_logger \
     --config 'configs/config.yaml' \
+    --watch_model \
     # --project 'debug' \

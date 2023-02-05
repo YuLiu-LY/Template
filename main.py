@@ -12,12 +12,11 @@ sys.path.append(root_path)
 from models.dinosaur import Dinosaur
 from methods.method import SlotAttentionMethod
 from methods.utils import ImageLogCallback, set_random_seed, state_dict_ckpt
+from data.datasets import make_datamodule
 
 import argparse
 import json
 import yaml
-
-from data.datasets import make_datamodule
 
 
 monitors = {
@@ -43,6 +42,7 @@ parser.add_argument('--tags', nargs='+', default=None, help='wandb tags')
 parser.add_argument('--notes', default='', help='notes for this run')
 parser.add_argument('--job_type', default='train', help='train, test, debug')
 parser.add_argument('--save_code', default=False, action='store_true')
+parser.add_argument('--watch_model', default=False, action='store_true')
 # Data arguments
 parser.add_argument('--dataset', default='')
 parser.add_argument('--split_name', type=str, default='image', help='split for dataset')
@@ -120,6 +120,8 @@ def main(args):
             save_code=args.save_code,
         ) 
         method.save_hyperparameters(args)
+        if args.watch_model:
+            logger.watch(model, log='parameters', log_freq=100)
         callbacks = [
             LearningRateMonitor("step"), 
             ImageLogCallback(), 
@@ -156,7 +158,8 @@ def main(args):
     if args.check_val_every_n_epoch > 0:
         kwargs['check_val_every_n_epoch'] = args.check_val_every_n_epoch
     if args.job_type == 'debug':
-        kwargs['fast_dev_run'] = True
+        kwargs['limit_train_batches'] = 10
+        kwargs['limit_val_batches'] = 5
 
     trainer = Trainer(**kwargs)
     if args.job_type == 'test':

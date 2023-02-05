@@ -5,5 +5,6 @@ python main.py \
     --job_type 'debug' \
     --project 'debug' \
     --dataset 'voc' \
-    # --enable_logger \
+    --enable_logger \
+    --watch_model \
 

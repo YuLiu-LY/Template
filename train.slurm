@@ -16,3 +16,4 @@ python main.py \
     --enable_logger \
     --config 'configs/config.yaml' \
     # --project 'debug' \
+    # --watch_model \
