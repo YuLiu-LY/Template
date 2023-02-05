@@ -1,11 +1,3 @@
-import os
-import sys
-import json
-root_path = os.path.abspath(__file__)
-root_path = '/'.join(root_path.split('/')[:-2])
-sys.path.append(root_path)
-
-
 import torch
 import random
 from PIL import Image
@@ -14,8 +6,6 @@ from tqdm import tqdm
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import transforms
-
-from methods.utils import rescale
 
 
 class CLEVRDataset(Dataset):
@@ -40,7 +30,7 @@ class CLEVRDataset(Dataset):
                 transforms.ToTensor(),
             ]
         if use_rescale:
-            T.append(transforms.Lambda(rescale))  # rescale between -1 and 1
+            T.append(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]))
         self.transform_img = transforms.Compose(T)
         
         self.files = files

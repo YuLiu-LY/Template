@@ -87,12 +87,12 @@ class Dinosaur(nn.Module):
         super().__init__()
 
         self.resolution = args.resolution
-        self.backbone = DINOEncoder(args.dino_type)
+        self.backbone = DINOEncoder('vits8')
         d_model =  self.backbone.emb_dim
         if args.init_method == 'text':
             self.text_enc = TextEncoder(args.slot_size)
         
-        enc_stride = int("".join(list(filter(str.isdigit, args.dino_type))))
+        enc_stride = int("".join(list(filter(str.isdigit, 'vits8'))))
         feature_resolution = args.resolution[0] // enc_stride, args.resolution[1] // enc_stride
         self.H = feature_resolution[0]
         self.W = feature_resolution[1]
@@ -101,15 +101,15 @@ class Dinosaur(nn.Module):
             args.num_iter, args.num_slots, 
             d_model, args.slot_size, 
             args.truncate, 
-            args.init_method, args.drop_path)
+            args.init_method, 0)
         
         self.slot_proj = linear(args.slot_size, d_model, bias=False)
         self.dinosaur_dec = DinosaurDecoder(args, d_model)
 
-        self.loss = args.loss
-        if args.loss == 'mse':
+        self.loss = 'mse'
+        if self.loss == 'mse':
             self.criterion = nn.MSELoss()
-        elif args.loss == 'pearson':
+        elif self.loss == 'pearson':
             self.criterion = PearsonLoss()
 
 

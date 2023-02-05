@@ -1,13 +1,12 @@
 import os
+import torch
 import pytorch_lightning as pl
-import torch.nn.functional as F
 from PIL import Image
 from pathlib import Path
+from typing import Tuple
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
-from typing import Tuple, Any
 from torchvision.transforms import transforms
-import torch
 from torchvision.transforms import InterpolationMode
 
 
@@ -58,7 +57,7 @@ class VOCDataset(Dataset):
 
         assert all([Path(f).is_file() for f in self.masks]) and all([Path(f).is_file() for f in self.images])
 
-    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+    def __getitem__(self, index: int):
         img = self.transform(Image.open(self.images[index]).convert('RGB'))
         
         mask = Image.open(self.masks[index])

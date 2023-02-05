@@ -1,6 +1,7 @@
 from models import vit
 import torch
 
+
 def dino_vits16(pretrained=True, **kwargs):
     """
     ViT-Small/16x16 pre-trained with DINO.
@@ -8,7 +9,7 @@ def dino_vits16(pretrained=True, **kwargs):
     """
     model = vit.__dict__["vit_small"](patch_size=16, num_classes=0, **kwargs)
     if pretrained:
-        state_dict = torch.load('./dino_ckpts/dino_deitsmall16_pretrain.pth', map_location='cpu')
+        state_dict = torch.load('/home/yuliu/Projects/LG-SLOT/dino_ckpts/dino_deitsmall16_pretrain.pth', map_location='cpu')
         model.load_state_dict(state_dict, strict=True)
     return model
 
@@ -20,7 +21,7 @@ def dino_vits8(pretrained=True, **kwargs):
     """
     model = vit.__dict__["vit_small"](patch_size=8, num_classes=0, **kwargs)
     if pretrained:
-        state_dict = torch.load('./dino_ckpts/dino_deitsmall8_pretrain.pth', map_location='cpu')
+        state_dict = torch.load('/home/yuliu/Projects/LG-SLOT/dino_ckpts/dino_deitsmall8_pretrain.pth', map_location='cpu')
         model.load_state_dict(state_dict, strict=True)
     return model
 
@@ -32,7 +33,7 @@ def dino_vitb16(pretrained=True, **kwargs):
     """
     model = vit.__dict__["vit_base"](patch_size=16, num_classes=0, **kwargs)
     if pretrained:
-        state_dict = torch.load('./dino_ckpts/dino_vitbase16_pretrain.pth', map_location='cpu')
+        state_dict = torch.load('/home/yuliu/Projects/LG-SLOT/dino_ckpts/dino_vitbase16_pretrain.pth', map_location='cpu')
         model.load_state_dict(state_dict, strict=True)
     return model
 
@@ -44,7 +45,7 @@ def dino_vitb8(pretrained=True, **kwargs):
     """
     model = vit.__dict__["vit_base"](patch_size=8, num_classes=0, **kwargs)
     if pretrained:
-        state_dict = torch.load('./dino_ckpts/dino_vitbase8_pretrain.pth', map_location='cpu')
+        state_dict = torch.load('/home/yuliu/Projects/LG-SLOT/dino_ckpts/dino_vitbase8_pretrain.pth', map_location='cpu')
         model.load_state_dict(state_dict, strict=True)
     return model
 

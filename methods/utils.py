@@ -1,21 +1,12 @@
-from typing import TypeVar
+import torch
+import wandb
 import random
 import numpy as np
-import torch
-from pytorch_lightning import Callback
-from sklearn.metrics import adjusted_rand_score
-from pytorch_lightning import Trainer
-from copy import deepcopy
 import torch.nn as nn
 import torch.nn.functional as F
-
-import wandb
-
-
-Tensor = TypeVar("Tensor")
-T = TypeVar("T")
-TK = TypeVar("TK")
-TV = TypeVar("TV")
+from pytorch_lightning import Trainer
+from pytorch_lightning import Callback
+from sklearn.metrics import adjusted_rand_score
 
 
 def build_grid(resolution):
@@ -39,10 +30,6 @@ class PositionEmbed(nn.Module):
         return inputs + emb_proj
 
 
-def rescale(x: Tensor) -> Tensor:
-    return x * 2 - 1
-
-
 class ImageLogCallback(Callback):
     def on_validation_epoch_end(self, trainer: Trainer, pl_module):
         """Called when the test epoch ends."""
@@ -50,8 +37,8 @@ class ImageLogCallback(Callback):
             with torch.no_grad():
                 pl_module.eval()
                 images = pl_module.sample_images()
-                # trainer.logger.experiment.log({"images": wandb.Image([images])}, commit=False)
-                trainer.logger.experiment.add_image('images', images, trainer.global_step)
+                trainer.logger.experiment.log({"images": [wandb.Image(images)]})
+                # trainer.logger.experiment.add_image('images', images, trainer.global_step)
     
     def on_test_epoch_end(self, trainer: Trainer, pl_module):
         """Called when the test epoch ends."""
@@ -60,11 +47,11 @@ class ImageLogCallback(Callback):
             with torch.no_grad():
                 pl_module.eval()
                 images = pl_module.sample_images()
-                # trainer.logger.experiment.log({"images": wandb.Image([images])}, commit=False)
-                trainer.logger.experiment.add_image('images', images, trainer.global_step)
+                trainer.logger.experiment.log({"images": [wandb.Image(images)]})
+                # trainer.logger.experiment.add_image('images', images, trainer.global_step)
         
 
-def to_rgb_from_tensor(x: Tensor, mean=[0, 0, 0], std=[1, 1, 1]) -> Tensor:
+def to_rgb_from_tensor(x, mean=[0, 0, 0], std=[1, 1, 1]):
     return x * std + mean
 
 

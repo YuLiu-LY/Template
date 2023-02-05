@@ -25,11 +25,11 @@ class SlotAttentionMethod(pl.LightningModule):
         self.sample_num = 0
         self.empty_cache = True
         self.sigma = 0
-        self.evaluate = args.evaluate
+        self.evaluator = args.evaluator
         self.init_method = args.init_method
         self.mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
         self.std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
-        if self.evaluate == "ap":
+        if self.evaluator == "ap":
             self.seg_metric_logger = Segmentation_Metrics_Calculator(max_ins_num=self.args.num_slots)
 
     def forward(self, input, **kwargs):
@@ -46,7 +46,6 @@ class SlotAttentionMethod(pl.LightningModule):
         loss = 0
         logs = {'sigma': self.sigma}
         for k, v in loss_dict.items():
-            self.log_dict({k: v})
             loss += v
             logs[k] = v.item()
         self.log_dict(logs, sync_dist=True)
@@ -108,10 +107,9 @@ class SlotAttentionMethod(pl.LightningModule):
         masks = out['attns'] 
         output = {}
         for k, v in loss_dict.items():
-            self.log_dict({k: v})
             output[k] = v
 
-        if self.evaluate == 'ari':
+        if self.evaluator == 'ari':
             m = masks.detach().argmax(dim=1)
             ari, _ = average_ari(m, masks_gt)
             ari_fg, _ = average_ari(m, masks_gt, True)
@@ -119,7 +117,7 @@ class SlotAttentionMethod(pl.LightningModule):
             output['ARI'] = ari.to(self.device)
             output['ARI_FG'] = ari_fg.to(self.device)
             output['MSC_FG'] = msc_fg.to(self.device)
-        elif self.evaluate == 'iou':
+        elif self.evaluator == 'iou':
             K = self.args.num_slots
             m = F.one_hot(masks.argmax(dim=1), K).permute(0, 4, 1, 2, 3) # (B, K, 1, H, W)
             iou, dice = iou_and_dice(m[:, 0], masks_gt)
@@ -129,7 +127,7 @@ class SlotAttentionMethod(pl.LightningModule):
                 dice = torch.max(dice, dice1)
             output['IoU'] = iou.mean()
             output['Dice'] = dice.mean()
-        elif self.evaluate == "ap":
+        elif self.evaluator == "ap":
             masks = masks.detach().cpu()[:, :, 0, :, :]           # (B, K, 1, H, W) -> (B, K, H, W)
             pred_mask_conf, _ = masks.max(dim=1)
             confidence_mask = (pred_mask_conf > 0.5)
@@ -143,7 +141,7 @@ class SlotAttentionMethod(pl.LightningModule):
                 gt_fg_batch=gt_fg_batch,
                 pred_conf_mask_batch=pred_mask_conf
             )
-        elif self.evaluate == 'mbo':
+        elif self.evaluator == 'mbo':
             K = self.args.num_slots
             m = F.one_hot(masks.argmax(dim=1), K).permute(0, 4, 1, 2, 3).squeeze(2) # (B, K, H, W)
             mBO, mOR = mean_best_overlap(m, masks_gt)
@@ -153,7 +151,7 @@ class SlotAttentionMethod(pl.LightningModule):
 
     def validation_epoch_end(self, outputs):
         self.empty_cache = True
-        if self.evaluate != "ap":
+        if self.evaluator != "ap":
             keys = outputs[0].keys()
             logs = {}
             for k in keys:
@@ -191,10 +189,9 @@ class SlotAttentionMethod(pl.LightningModule):
         # masks = out['cross_attns'] 
         output = {}
         for k, v in loss_dict.items():
-            self.log_dict({k: v})
             output[k] = v
 
-        if self.evaluate == 'ari':
+        if self.evaluator == 'ari':
             m = masks.detach().argmax(dim=1)
             ari, _ = average_ari(m, masks_gt)
             ari_fg, _ = average_ari(m, masks_gt, True)
@@ -202,7 +199,7 @@ class SlotAttentionMethod(pl.LightningModule):
             output['ARI'] = ari.to(self.device)
             output['ARI_FG'] = ari_fg.to(self.device)
             output['MSC_FG'] = msc_fg.to(self.device)
-        elif self.evaluate == 'iou':
+        elif self.evaluator == 'iou':
             K = self.args.num_slots
             m = F.one_hot(masks.argmax(dim=1), K).permute(0, 4, 1, 2, 3)
             iou, dice = iou_and_dice(m[:, 0], masks_gt)
@@ -212,7 +209,7 @@ class SlotAttentionMethod(pl.LightningModule):
                 dice = torch.max(dice, dice1)
             output['IoU'] = iou.mean()
             output['Dice'] = dice.mean()
-        elif self.evaluate == "ap":
+        elif self.evaluator == "ap":
             masks = masks.detach()[:, :, 0, :, :]           # (B, K, 1, H, W) -> (B, K, H, W)
             pred_mask_conf, _ = masks.max(dim=1)
             confidence_mask = (pred_mask_conf > 0.5)
@@ -226,7 +223,7 @@ class SlotAttentionMethod(pl.LightningModule):
                 gt_fg_batch=gt_fg_batch,
                 pred_conf_mask_batch=pred_mask_conf
             )
-        elif self.evaluate == 'mbo':
+        elif self.evaluator == 'mbo':
             K = self.args.num_slots
             m = F.one_hot(masks.argmax(dim=1), K).permute(0, 4, 1, 2, 3).squeeze(2) # (B, K, H, W)
             mBO, mOR = mean_best_overlap(m, masks_gt)
@@ -236,7 +233,7 @@ class SlotAttentionMethod(pl.LightningModule):
 
     def test_epoch_end(self, outputs):
         self.empty_cache = True
-        if self.evaluate != "ap":
+        if self.evaluator != "ap":
             keys = outputs[0].keys()
             logs = {}
             for k in keys:
@@ -263,7 +260,7 @@ class SlotAttentionMethod(pl.LightningModule):
 
     def configure_optimizers(self):
         params = [
-        {'params': (x[1] for x in self.model.named_parameters() if 'backbone' not in x[0] and 'clip' not in x[0]), 'lr': self.args.lr_main},
+        {'params': (x[1] for x in self.model.named_parameters() if 'backbone' not in x[0] and 'clip' not in x[0]), 'lr': self.args.lr},
         ]
         optimizer = optim.Adam(params)
         

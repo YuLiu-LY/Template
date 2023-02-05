@@ -1,17 +1,10 @@
 import numpy as np
-from PIL import Image
-import matplotlib.pyplot as plt
 import cv2
-import os
-from tqdm import tqdm
-import json
 import torch
 from sklearn.metrics import adjusted_rand_score
 from skimage.morphology import convex_hull_image, disk, binary_dilation, binary_erosion
-from torch import nn
 from scipy.optimize import linear_sum_assignment
 import torch.nn.functional as F
-import sys
 
 
 # General util function to get the boundary of a binary mask.

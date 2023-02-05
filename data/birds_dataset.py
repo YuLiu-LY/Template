@@ -1,9 +1,5 @@
 import os
 import sys
-root_path = os.path.abspath(__file__)
-root_path = '/'.join(root_path.split('/')[:-2])
-sys.path.append(root_path)
-
 from typing import Tuple
 import numpy as np
 import pandas as pd
@@ -13,8 +9,7 @@ from PIL import Image
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from torchvision.transforms import transforms
-
-from methods.utils import rescale
+from torchvision.transforms import InterpolationMode
 
 
 class CubDataset(Dataset):
@@ -31,7 +26,7 @@ class CubDataset(Dataset):
         self.use_flip = use_flip
 
         self.transform_seg = transforms.Compose([
-            transforms.Resize(resolution),            
+            transforms.Resize(resolution, interpolation=InterpolationMode.NEAREST),            
             transforms.ToTensor(),
         ])
         trans = [
@@ -39,7 +34,7 @@ class CubDataset(Dataset):
             transforms.ToTensor(),
         ]
         if use_rescale:
-            trans.append(transforms.Lambda(rescale))
+            trans.append(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]))
         self.transform = transforms.Compose(trans)
         
         self.ROOT_DIR = data_root
@@ -223,7 +218,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
-    args.data_root = '/scratch/generalvision/Birds'
+    args.data_root = '/home/yuliu/Dataset/Birds'
     args.use_rescale = False
     args.batch_size = 40
     args.num_workers = 4

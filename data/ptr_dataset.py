@@ -1,21 +1,14 @@
-from typing import Tuple
-import json
 import os
-import sys
-root_path = os.path.abspath(__file__)
-root_path = '/'.join(root_path.split('/')[:-2])
-sys.path.append(root_path)
-
+import json
 import torch
 import pytorch_lightning as pl
 from PIL import Image
 from glob import glob
 from tqdm import tqdm
+from typing import Tuple
 from pycocotools.mask import decode
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import transforms
-
-from methods.utils import rescale
 
 
 class PTRDataset(Dataset):
@@ -44,7 +37,7 @@ class PTRDataset(Dataset):
             transforms.ToTensor(),
         ]
         if use_rescale:
-            trans.append(transforms.Lambda(rescale))
+            trans.append(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]))
         self.transform = transforms.Compose(trans)
         self.scene_files, self.img_files = self.get_files()
 
