@@ -6,7 +6,6 @@
 *.png
 **/.DS_Store
 *.ckpt
-*.yaml
 test.ipynb
 test.py
 *.pth

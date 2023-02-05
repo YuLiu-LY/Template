@@ -129,6 +129,7 @@ def main(args):
             save_dir=args.log_path,
             save_code=args.save_code,
         ) 
+        method.save_hyperparameters(args)
         callbacks = [
             LearningRateMonitor("step"), 
             ImageLogCallback(), 
@@ -168,7 +169,6 @@ def main(args):
         kwargs['fast_dev_run'] = True
 
     trainer = Trainer(**kwargs)
-    method.save_hyperparameters(args)
     if args.job_type == 'test':
         trainer.test(method, datamodule=datamodule)
     else:

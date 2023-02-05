@@ -1,0 +1,33 @@
+# Path arguments
+  # ckpt_path: ''
+# Wandb arguments
+  # entity:
+  project: debug
+  name: debug
+  # group: ''
+  # tags: ''
+  # notes: 
+  job_type: train
+  # save_code: true
+# Data arguments
+  dataset: birds
+  # split_name:
+  # use_rescale: true
+# Training arguments
+  evaluator: iou
+  num_workers: 4
+  check_val_every_n_epoch: 1
+  # check_val_every_n_step: 5000
+  # precision: 16
+  resolution: [128, 128]
+  batch_size: 64
+  grad_clip: 1.0
+  # grad_clip_algorithm: value
+  # enable_logger: true
+  # load_from_ckpt: true
+  # enable_profiler: true
+  lr: 0.0004
+  warmup_steps: 10000
+  decay_steps: 50000
+  max_steps: 2500000
+# Model arguments
