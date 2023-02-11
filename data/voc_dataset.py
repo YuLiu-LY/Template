@@ -24,7 +24,7 @@ class VOCDataset(Dataset):
         resolution: Tuple[int, int],
         split: str = "train",
         max_class_per_img: int = 6,
-        use_rescale: bool = True,
+        img_normalize: bool = True,
     ):
         super().__init__()
         self.split = split
@@ -40,7 +40,7 @@ class VOCDataset(Dataset):
                 transforms.Resize(resolution),
                 transforms.ToTensor(),
             ]
-        if use_rescale:
+        if img_normalize:
             trans.append(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
         self.transform = transforms.Compose(trans)
         self.transform_seg = transforms.Compose([
@@ -101,8 +101,8 @@ class VOCDataModule(pl.LightningDataModule):
         self.batch_size = args.batch_size
         self.num_workers = args.num_workers
 
-        self.train_dataset = VOCDataset(args.data_root, args.resolution, 'train', 6, use_rescale=args.use_rescale)
-        self.val_dataset = VOCDataset(args.data_root, args.resolution, 'val', 6, use_rescale=args.use_rescale)
+        self.train_dataset = VOCDataset(args.data_root, args.resolution, 'train', 6, img_normalize=args.img_normalize)
+        self.val_dataset = VOCDataset(args.data_root, args.resolution, 'val', 6, img_normalize=args.img_normalize)
 
     def train_dataloader(self):
         return DataLoader(
@@ -138,7 +138,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
     args.data_root = '/home/yuliu/Dataset/VOC2012'
-    args.use_rescale = True
+    args.img_normalize = True
     args.batch_size = 16
     args.num_workers = 0
     args.resolution = 128, 128

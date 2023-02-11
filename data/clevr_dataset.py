@@ -21,7 +21,7 @@ class CLEVRDataset(Dataset):
         files,
         max_n_objects,
         split:str,
-        use_rescale=True,
+        img_normalize=True,
     ):
         super().__init__()
         self.max_n_objects = max_n_objects
@@ -36,7 +36,7 @@ class CLEVRDataset(Dataset):
         T = [
                 transforms.ToTensor(),
             ]
-        if use_rescale:
+        if img_normalize:
             T.append(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]))
         self.transform_img = transforms.Compose(T)
         
@@ -184,9 +184,9 @@ class CLEVRDataModule(pl.LightningDataModule):
         print(f"{len(test_images)} test images")
 
         # Datasets
-        trainset = CLEVRDataset(train_images, self.max_n_objects, 'train', args.use_rescale)
-        valset = CLEVRDataset(val_images, self.max_n_objects, 'val', args.use_rescale)
-        testset = CLEVRDataset(test_images, self.max_n_objects, 'test', args.use_rescale)
+        trainset = CLEVRDataset(train_images, self.max_n_objects, 'train', args.img_normalize)
+        valset = CLEVRDataset(val_images, self.max_n_objects, 'val', args.img_normalize)
+        testset = CLEVRDataset(test_images, self.max_n_objects, 'test', args.img_normalize)
 
         return trainset, valset, testset
 
@@ -277,7 +277,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
     args.data_root = '/scratch/generalvision/CLEVR'
-    args.use_rescale = False
+    args.img_normalize = False
     args.batch_size = 20
     args.num_workers = 4
     args.max_n_objects = 3

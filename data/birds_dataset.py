@@ -23,7 +23,7 @@ class CubDataset(Dataset):
         data_root: str,
         resolution: Tuple[int, int],
         data_split='train', 
-        use_rescale=False, # rescale to [-1, 1]
+        img_normalize=False, # rescale to [-1, 1]
         use_flip=False,
     ):
         super().__init__()        
@@ -38,7 +38,7 @@ class CubDataset(Dataset):
             transforms.Resize(resolution),            
             transforms.ToTensor(),
         ]
-        if use_rescale:
+        if img_normalize:
             trans.append(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]))
         self.transform = transforms.Compose(trans)
         
@@ -181,15 +181,15 @@ class BirdsDataModule(pl.LightningDataModule):
 
         self.train_dataset = CubDataset(
             args.data_root, args.resolution, 'train', 
-            use_flip=False, use_rescale=args.use_rescale
+            use_flip=False, img_normalize=args.img_normalize
         )
         self.val_dataset = CubDataset(
             args.data_root, args.resolution, 'val', 
-            use_flip=False, use_rescale=args.use_rescale
+            use_flip=False, img_normalize=args.img_normalize
         )
         self.test_dataset = CubDataset(
             args.data_root, args.resolution, 'test', 
-            use_flip=False, use_rescale=args.use_rescale
+            use_flip=False, img_normalize=args.img_normalize
         )
 
     def train_dataloader(self):
@@ -226,7 +226,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
     args.data_root = '/home/yuliu/Dataset/Birds'
-    args.use_rescale = False
+    args.img_normalize = False
     args.batch_size = 40
     args.num_workers = 0
     args.resolution = 128, 128

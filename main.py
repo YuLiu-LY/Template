@@ -91,7 +91,7 @@ parser.add_argument('--init_method', default='embedding', help='embedding, share
 parser.add_argument('--sigma_steps', type=int, default=30000)
 parser.add_argument('--sigma_final', type=float, default=0)
 parser.add_argument('--sigma_start', type=float, default=1)
-parser.add_argument('--use_rescale', default=False, action='store_true')
+parser.add_argument('--img_normalize', default=False, action='store_true')
 
 
 def main(args):

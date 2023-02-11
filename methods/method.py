@@ -68,7 +68,7 @@ class SlotAttentionMethod(pl.LightningModule):
         m1 = out['attns']
         m2 = out['cross_attns']
 
-        if self.args.use_rescale:
+        if self.args.img_normalize:
             batch_img = to_rgb_from_tensor(batch_img, self.mean.to(self.device), self.std.to(self.device))
         out = torch.cat(
                 [

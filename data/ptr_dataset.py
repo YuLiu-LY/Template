@@ -25,7 +25,7 @@ class PTRDataset(Dataset):
         data_root: str,
         max_n_objects: int,
         split: str = "train",
-        use_rescale=True,
+        img_normalize=True,
     ):
         super().__init__()
         self.resolution = resolution
@@ -43,7 +43,7 @@ class PTRDataset(Dataset):
             transforms.Resize(resolution),            
             transforms.ToTensor(),
         ]
-        if use_rescale:
+        if img_normalize:
             trans.append(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]))
         self.transform = transforms.Compose(trans)
         self.scene_files, self.img_files = self.get_files()
@@ -119,14 +119,14 @@ class PTRDataModule(pl.LightningDataModule):
             data_root=self.data_root,
             split="train",
             max_n_objects=self.max_n_objects,
-            use_rescale=args.use_rescale
+            img_normalize=args.img_normalize
         )
         self.val_dataset = PTRDataset(
             resolution=args.resolution,
             data_root=self.data_root,
             split="val",
             max_n_objects=self.max_n_objects,
-            use_rescale=args.use_rescale
+            img_normalize=args.img_normalize
         )
 
     def train_dataloader(self):
@@ -162,7 +162,7 @@ class PTRDataModule(pl.LightningDataModule):
 #     parser = argparse.ArgumentParser()
 #     args = parser.parse_args()
 #     args.data_root = '/scratch/generalvision/PTR'
-#     args.use_rescale = False
+#     args.img_normalize = False
 #     args.batch_size = 40
 #     args.num_workers = 4
 #     args.resolution = 128, 128
