@@ -39,7 +39,7 @@ class CubDataset(Dataset):
             transforms.ToTensor(),
         ]
         if img_normalize:
-            trans.append(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]))
+            trans.append(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
         self.transform = transforms.Compose(trans)
         
         self.ROOT_DIR = data_root

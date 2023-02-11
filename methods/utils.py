@@ -37,8 +37,8 @@ class ImageLogCallback(Callback):
             with torch.no_grad():
                 pl_module.eval()
                 images = pl_module.sample_images()
-                trainer.logger.experiment.log({"images": [wandb.Image(images)]})
-                # trainer.logger.experiment.add_image('images', images, trainer.global_step)
+                trainer.logger.experiment.log({"images": [wandb.Image(images)]}) # wandb
+                # trainer.logger.experiment.add_image('images', images, trainer.global_step) # tensorboard
     
     def on_test_epoch_end(self, trainer: Trainer, pl_module):
         """Called when the test epoch ends."""

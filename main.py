@@ -46,6 +46,8 @@ parser.add_argument('--watch_model', default=False, action='store_true')
 # Data arguments
 parser.add_argument('--dataset', default='')
 parser.add_argument('--split_name', type=str, default='image', help='split for dataset')
+parser.add_argument('--img_normalize', default=False, action='store_true')
+parser.add_argument('--normalize_type', default='imagenet', help='imagenet, 0.5')
 # Training arguments
 parser.add_argument('--seed', type=int, default=42)
 parser.add_argument('--evaluator', type=str, default='iou', help='ari, iou, mbo')
@@ -91,7 +93,6 @@ parser.add_argument('--init_method', default='embedding', help='embedding, share
 parser.add_argument('--sigma_steps', type=int, default=30000)
 parser.add_argument('--sigma_final', type=float, default=0)
 parser.add_argument('--sigma_start', type=float, default=1)
-parser.add_argument('--img_normalize', default=False, action='store_true')
 
 
 def main(args):

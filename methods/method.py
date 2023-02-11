@@ -66,7 +66,6 @@ class SlotAttentionMethod(pl.LightningModule):
         else:
             out = self.model.forward(batch_img, sigma=0)
         m1 = out['attns']
-        m2 = out['cross_attns']
 
         if self.args.img_normalize:
             batch_img = to_rgb_from_tensor(batch_img, self.mean.to(self.device), self.std.to(self.device))
@@ -78,8 +77,7 @@ class SlotAttentionMethod(pl.LightningModule):
             ).cpu().clamp(0, 1)
 
         m_i1 = (m1 * batch_img.unsqueeze(1) + 1 - m1).cpu() # [B, K, C, H, W]
-        m_i2 = (m2 * batch_img.unsqueeze(1) + 1 - m2).cpu() # [B, K, C, H, W]
-        out = torch.cat([out, m_i1, m_i2], dim=1) # add masks
+        out = torch.cat([out, m_i1], dim=1) # add masks
         # out = torch.cat([out, mask_gt.unsqueeze(1).expand(-1, -1, 3, -1, -1).cpu()], dim=1) # add gt masks
 
         # shape of out: [N, K, C, H, W]
