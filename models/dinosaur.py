@@ -10,6 +10,7 @@ from methods.utils import *
 from models.slot_attn import SlotAttentionEncoder
 from models.transformer import TransformerDecoder
 from models.dino_hubconf import dino_models
+from models.models import register
 
 
 CLASSES = ['background', \
@@ -82,6 +83,7 @@ class DinosaurDecoder(nn.Module):
             args.num_dec_blocks, N_tokens, d_model, args.num_dec_heads, args.dropout)
 
 
+@register('dinosaur')
 class Dinosaur(nn.Module):
     def __init__(self, args):
         super().__init__()
@@ -113,7 +115,7 @@ class Dinosaur(nn.Module):
             self.criterion = PearsonLoss()
 
 
-    def forward(self, image, sigma=0, labels=None):
+    def forward(self, image, sigma=0, text_token=None, tau=0.1, labels=None):
         """
         image: batch_size x img_channels x H x W
         """

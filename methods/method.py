@@ -25,6 +25,7 @@ class SlotAttentionMethod(pl.LightningModule):
         self.sample_num = 0
         self.empty_cache = True
         self.sigma = 0
+        self.tau = 0.1
         self.evaluator = args.evaluator
         self.init_method = args.init_method
         self.mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
@@ -37,12 +38,11 @@ class SlotAttentionMethod(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         batch_img = batch['image']
+        text_token = batch.get('text_token', None)
         self.sigma = self.cosine_anneal(self.global_step, self.args.sigma_steps, start_value=self.args.sigma_start, final_value=self.args.sigma_final)
-        if self.init_method == 'text':
-            labels = batch['label']
-            loss_dict = self.model.forward(batch_img, sigma=self.sigma, labels=labels)['loss']
-        else:
-            loss_dict = self.model.forward(batch_img, sigma=self.sigma)['loss']
+        self.tau = self.cosine_anneal(self.global_step, self.args.tau_steps, start_value=self.args.tau_start, final_value=self.args.tau_final)
+        out = self.model.forward(batch_img, text_token=text_token, sigma=self.sigma, tau=self.tau)
+        loss_dict = out['loss']
         loss = 0
         logs = {'sigma': self.sigma}
         for k, v in loss_dict.items():
@@ -59,25 +59,30 @@ class SlotAttentionMethod(pl.LightningModule):
         batch = next(self.val_iter)
         ls = torch.arange(self.args.n_samples)
         batch_img = batch['image'][ls].to(self.device)
+        text_token = batch.get('text_token', None)
+        if text_token is not None:
+            text_token = text_token[ls]
         # mask_gt = batch['mask'][ls]
-        if self.init_method == 'text':
-            labels = batch['label'][ls].to(self.device)
-            out = self.model.forward(batch_img, sigma=0, labels=labels)
-        else:
-            out = self.model.forward(batch_img, sigma=0)
+        out = self.model.forward(batch_img, text_token=text_token, sigma=0, tau=self.tau, visualize=True)
         m1 = out['attns']
-
+        m2 = out.get('loss_attns', None)
+        recon = out['recon']
         if self.args.img_normalize:
             batch_img = to_rgb_from_tensor(batch_img, self.mean.to(self.device), self.std.to(self.device))
+            recon = to_rgb_from_tensor(recon, self.mean.to(self.device), self.std.to(self.device))
         out = torch.cat(
                 [
                     batch_img.unsqueeze(1),  # original images
+                    recon.unsqueeze(1),  # reconstructions
                 ],
                 dim=1,
             ).cpu().clamp(0, 1)
 
         m_i1 = (m1 * batch_img.unsqueeze(1) + 1 - m1).cpu() # [B, K, C, H, W]
         out = torch.cat([out, m_i1], dim=1) # add masks
+        if m2 is not None:
+            m_i2 = (m2 * batch_img.unsqueeze(1) + 1 - m2).cpu() # [B, K, C, H, W]
+            out = torch.cat([out, m_i2], dim=1) # add masks
         # out = torch.cat([out, mask_gt.unsqueeze(1).expand(-1, -1, 3, -1, -1).cpu()], dim=1) # add gt masks
 
         # shape of out: [N, K, C, H, W]
@@ -95,18 +100,15 @@ class SlotAttentionMethod(pl.LightningModule):
             self.empty_cache = False
 
         batch_img = batch['image']
-        masks_gt = batch['mask'] # [B, 1, H, W]
-        if self.init_method == 'text':
-            labels = batch['label']
-            out = self.model.forward(batch_img, sigma=self.sigma, labels=labels)
-        else:
-            out = self.model.forward(batch_img, sigma=self.sigma)
+        text_token = batch.get('text_token', None)
+        out = self.model.forward(batch_img, text_token=text_token, sigma=self.sigma, tau=self.tau)
         loss_dict = out['loss']
         masks = out['attns'] 
         output = {}
         for k, v in loss_dict.items():
             output[k] = v
-
+        if self.evaluator != 'none':
+            masks_gt = batch['mask'] # [B, 1, H, W] 
         if self.evaluator == 'ari':
             m = masks.detach().argmax(dim=1)
             ari, _ = average_ari(m, masks_gt)
@@ -116,7 +118,7 @@ class SlotAttentionMethod(pl.LightningModule):
             output['ARI_FG'] = ari_fg.to(self.device)
             output['MSC_FG'] = msc_fg.to(self.device)
         elif self.evaluator == 'iou':
-            K = self.args.num_slots
+            K = masks.shape[1]
             m = F.one_hot(masks.argmax(dim=1), K).permute(0, 4, 1, 2, 3) # (B, K, 1, H, W)
             iou, dice = iou_and_dice(m[:, 0], masks_gt)
             for i in range(1, K):
@@ -140,7 +142,7 @@ class SlotAttentionMethod(pl.LightningModule):
                 pred_conf_mask_batch=pred_mask_conf
             )
         elif self.evaluator == 'mbo':
-            K = self.args.num_slots
+            K = masks.shape[1]
             m = F.one_hot(masks.argmax(dim=1), K).permute(0, 4, 1, 2, 3).squeeze(2) # (B, K, H, W)
             mBO, mOR = mean_best_overlap(m, masks_gt)
             output['mBO'] = mBO.mean()
@@ -176,19 +178,16 @@ class SlotAttentionMethod(pl.LightningModule):
             self.empty_cache = False
 
         batch_img = batch['image']
-        masks_gt = batch['mask']
-        if self.init_method == 'text':
-            labels = batch['label']
-            out = self.model.forward(batch_img, sigma=0, labels=labels)
-        else:
-            out = self.model.forward(batch_img, sigma=0)
+        text_token = batch.get('text_token', None)
+        out = self.model.forward(batch_img, text_token=text_token, sigma=0)
         loss_dict = out['loss']
         masks = out['attns'] 
         # masks = out['cross_attns'] 
         output = {}
         for k, v in loss_dict.items():
             output[k] = v
-
+        if self.evaluator != 'none':
+            masks_gt = batch['mask'] # [B, 1, H, W] 
         if self.evaluator == 'ari':
             m = masks.detach().argmax(dim=1)
             ari, _ = average_ari(m, masks_gt)
@@ -198,7 +197,7 @@ class SlotAttentionMethod(pl.LightningModule):
             output['ARI_FG'] = ari_fg.to(self.device)
             output['MSC_FG'] = msc_fg.to(self.device)
         elif self.evaluator == 'iou':
-            K = self.args.num_slots
+            K = masks.shape[1]
             m = F.one_hot(masks.argmax(dim=1), K).permute(0, 4, 1, 2, 3)
             iou, dice = iou_and_dice(m[:, 0], masks_gt)
             for i in range(1, K):
@@ -222,7 +221,7 @@ class SlotAttentionMethod(pl.LightningModule):
                 pred_conf_mask_batch=pred_mask_conf
             )
         elif self.evaluator == 'mbo':
-            K = self.args.num_slots
+            K = masks.shape[1]
             m = F.one_hot(masks.argmax(dim=1), K).permute(0, 4, 1, 2, 3).squeeze(2) # (B, K, H, W)
             mBO, mOR = mean_best_overlap(m, masks_gt)
             output['mBO'] = mBO.mean()

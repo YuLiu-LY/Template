@@ -1,9 +1,13 @@
 python main.py \
     --seed 42 \
+    --dataset voc \
     --devices '0' \
     --batch_size 64 \
+    --check_val_every_n_epoch 20 \
     --name 'test' \
-    --enable_logger \
     --config 'configs/config.yaml' \
     --watch_model \
-    # --project 'debug' \
+    --project 'debug' \
+    --evaluator 'mbo' \
+    --model 'dinosaur' \
+    --enable_logger \
