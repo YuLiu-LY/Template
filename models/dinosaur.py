@@ -115,7 +115,7 @@ class Dinosaur(nn.Module):
             self.criterion = PearsonLoss()
 
 
-    def forward(self, image, sigma=0, text_token=None, tau=0.1, labels=None):
+    def forward(self, image, sigma=0, text_token=None, tau=0.1, visualize=False):
         """
         image: batch_size x img_channels x H x W
         """
@@ -126,11 +126,7 @@ class Dinosaur(nn.Module):
 
         # apply slot attention
         features = self.backbone(image) #[B, N, D]
-        if labels != None:
-            slots_init = self.text_enc(labels)
-            slot_attn_out = self.slot_attn(features, sigma=sigma, slots_init=slots_init, labels=labels)
-        else:
-            slot_attn_out = self.slot_attn(features, sigma=sigma)
+        slot_attn_out = self.slot_attn(features, sigma=sigma)
         slots = slot_attn_out['slots']
         attns = slot_attn_out['attn']
         
@@ -151,6 +147,8 @@ class Dinosaur(nn.Module):
         out['attns'] = attns
         out['cross_attns'] = cross_attn
         out['loss'] = loss
+        if visualize:
+            out['recon'] = image
         return out
     
 
