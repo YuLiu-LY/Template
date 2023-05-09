@@ -1,5 +1,5 @@
 import pytorch_lightning.loggers as pl_loggers
-from pytorch_lightning import Trainer
+from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint, ModelSummary
 from pytorch_lightning.profiler import PyTorchProfiler
 
@@ -9,9 +9,9 @@ root_path = os.path.abspath(__file__)
 root_path = '/'.join(root_path.split('/')[:-2])
 sys.path.append(root_path)
 
-from models.models import make_model
-from methods.method import SlotAttentionMethod
-from methods.utils import ImageLogCallback, set_random_seed, state_dict_ckpt
+from models.model import make_model
+from methods.method import Method
+from methods.utils import ImageLogCallback, state_dict_ckpt
 from data.datasets import make_datamodule
 
 import argparse
@@ -19,10 +19,10 @@ import json
 import yaml
 
 monitors = {
-    'iou': 'avg_IoU',
-    'ari': 'avg_ARI_FG',
-    'mbo': 'avg_mBO',
-    'ap': 'avg_AP@05',
+    'iou': 'val_IoU',
+    'ari': 'val_ARI_FG',
+    'mbo': 'val_mBO',
+    'ap': 'val_AP@05',
     'none': None
 }
 
@@ -72,6 +72,7 @@ parser.add_argument('--load_from_ckpt', default=False, action='store_true')
 parser.add_argument('--enable_profiler', default=False, help='enable profiler to trace the time of operations')
 # Optimizer arguments
 parser.add_argument('--lr', type=float, default=4e-4)
+parser.add_argument('--weight_decay', type=float, default=1e-2)
 parser.add_argument('--warmup_steps', type=int, default=10000)
 parser.add_argument('--decay_steps', type=int, default=100000)
 parser.add_argument('--max_steps', type=int, default=250000)
@@ -82,16 +83,13 @@ parser.add_argument('--num_dec_heads', type=int, default=4)
 parser.add_argument('--num_heads', type=int, default=4)
 parser.add_argument('--dropout', type=float, default=0)
 parser.add_argument('--drop_path', type=float, default=0.2)
-parser.add_argument('--truncate',  type=str, default='bi-level', help='bi-level or fixed-point or none')
 parser.add_argument('--img_enc', default='dino', help='dino, clip')
+parser.add_argument('--text_enc', default='bert', help='bert, clip_text')
 
 parser.add_argument('--num_iter', type=int, default=3)
 parser.add_argument('--num_slots', type=int, default=2)
 parser.add_argument('--slot_size', type=int, default=256)
 
-parser.add_argument('--use_cnn', default=False, action='store_true')
-parser.add_argument('--recon_feats', default=False, action='store_true')
-parser.add_argument('--norm_pix_loss', default=False, action='store_true')
 parser.add_argument('--use_cls_token', default=False, action='store_true')
 
 parser.add_argument('--mask_ratio', type=float, default=0)
@@ -102,10 +100,6 @@ parser.add_argument('--enc_kernel_size', type=int, default=5)
 
 parser.add_argument('--init_method', default='embedding', help='embedding, shared_gaussian')
 
-parser.add_argument('--sigma_steps', type=int, default=10000)
-parser.add_argument('--sigma_final', type=float, default=0)
-parser.add_argument('--sigma_start', type=float, default=1)
-
 parser.add_argument('--tau_steps', type=int, default=10000)
 parser.add_argument('--tau_final', type=float, default=0.1)
 parser.add_argument('--tau_start', type=float, default=1)
@@ -113,26 +107,20 @@ parser.add_argument('--tau_start', type=float, default=1)
 parser.add_argument('--temperature', default=0.07, type=float, help='temperature for softmax')
 parser.add_argument('--multi_label', default=3, type=int, help='multi-label contrastive learning')
 
-parser.add_argument('--N_slots_list', nargs='+', type=int, default=[32, 6])
-parser.add_argument('--slot_size_list', nargs='+', type=int, default=[128, 256])
-parser.add_argument('--num_iter_list', nargs='+', type=int, default=[2, 3])
-
 parser.add_argument('--model', type=str, default='recon')
-parser.add_argument('--use_feats_mlp', default=False, action='store_true')
-parser.add_argument('--use_pe', default=False, action='store_true')
 
 
 def main(args):
     print(args)
-    set_random_seed(args.seed)
+    seed_everything(args.seed)
 
     args.monitor = monitors[args.evaluator]
     datamodule = make_datamodule(args)
-    model = make_model(args)
+    model = make_model(args.model, args)
     if args.job_type == 'test':
         model.load_state_dict(state_dict_ckpt(args.ckpt_path))
         print(f'Load from checkpoint: {args.ckpt_path}')
-    method = SlotAttentionMethod(model=model, datamodule=datamodule, args=args)
+    method = Method(model=model, datamodule=datamodule, args=args)
 
     if args.enable_logger:
         logger = pl_loggers.WandbLogger(
@@ -163,15 +151,14 @@ def main(args):
     if args.enable_profiler:
         profiler = PyTorchProfiler(filename='profiler')
 
-    devices = [int(i) for i in args.devices.split(',')]
     kwargs = {
         'resume_from_checkpoint': args.ckpt_path if args.load_from_ckpt else None,
         'logger': logger,
         'default_root_dir': args.log_path,
         'num_sanity_val_steps': args.num_sanity_val_steps,
         'accelerator': 'gpu',
-        'devices': devices,
-        'strategy': 'ddp' if len(devices) > 1 else None,
+        'devices': args.N_gpus,
+        'strategy': 'ddp' if args.N_gpus > 1 else None,
         'max_steps': args.max_steps,
         'max_epochs': args.max_epochs,
         'log_every_n_steps': args.log_every_n_steps,
@@ -200,12 +187,18 @@ if __name__ == "__main__":
     config = yaml.load(open(args.config, 'r'), Loader=yaml.FullLoader)
     parser.set_defaults(**config)
     args = parser.parse_args()
+    # args.N_gpus = 1
+    # args.batch_size = 32
+    # args.dataset = 'coco'
+    # args.model = 'recon'
 
     paths = json.load(open('./path.json', 'r'))
     data_paths = paths['data_paths']
     args.data_root = data_paths[args.dataset]
     args.log_path = os.path.join(paths['log_path'], args.dataset)
+    if not os.path.exists(args.log_path):
+        os.makedirs(args.log_path)
     main(args)
 
-# salloc -N 1 -t 30:00 --gres=gpu:1 --qos=debug --cpus-per-task=32 --job-name=debug --partition=gpu
+# salloc -N 1 -t 30:00 --gres=gpu:1 --qos=level0 --cpus-per-task=32 --job-name=debug --partition=gpu
 # salloc -N 1 -t 24:00:00 --gres=gpu:1 --qos=gpu --cpus-per-task=32 --partition=gpu

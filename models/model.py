@@ -6,6 +6,6 @@ def register(name):
         return cls
     return decorator
 
-def make_model(args):
-    model = models[args.model](args)
+def make_model(model_name, args):
+    model = models[model_name](args)
     return model

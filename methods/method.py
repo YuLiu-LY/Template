@@ -11,11 +11,12 @@ root_path = os.path.abspath(__file__)
 root_path = '/'.join(root_path.split('/')[:-2])
 sys.path.append(root_path)
 
-from methods.utils import to_rgb_from_tensor, average_ari, iou_and_dice, average_segcover, mean_best_overlap
+from methods.utils import to_rgb_from_tensor, Evaluator
 from methods.seg_metrics import Segmentation_Metrics_Calculator
+from models.model import make_model
 
 
-class SlotAttentionMethod(pl.LightningModule):
+class Method(pl.LightningModule):
     def __init__(self, model, datamodule: pl.LightningDataModule, args):
         super().__init__()
         self.model = model
@@ -24,14 +25,9 @@ class SlotAttentionMethod(pl.LightningModule):
         self.val_iter = iter(self.datamodule.val_dataloader())
         self.sample_num = 0
         self.empty_cache = True
-        self.sigma = 0
-        self.tau = 0.1
-        self.evaluator = args.evaluator
-        self.init_method = args.init_method
+        self.evaluator = Evaluator(args.evaluator) if args.evaluator != None else None
         self.mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
         self.std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
-        if self.evaluator == "ap":
-            self.seg_metric_logger = Segmentation_Metrics_Calculator(max_ins_num=self.args.num_slots)
 
     def forward(self, input, **kwargs):
         return self.model(input, **kwargs)
@@ -39,60 +35,40 @@ class SlotAttentionMethod(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         batch_img = batch['image']
         text_token = batch.get('text_token', None)
-        self.sigma = self.cosine_anneal(self.global_step, self.args.sigma_steps, start_value=self.args.sigma_start, final_value=self.args.sigma_final)
-        self.tau = self.cosine_anneal(self.global_step, self.args.tau_steps, start_value=self.args.tau_start, final_value=self.args.tau_final)
-        out = self.model.forward(batch_img, text_token=text_token, sigma=self.sigma, tau=self.tau)
+        out = self.model.forward(batch_img, text_token=text_token)
         loss_dict = out['loss']
         loss = 0
-        logs = {'sigma': self.sigma}
+        logs = {}
         for k, v in loss_dict.items():
             loss += v
             logs[k] = v.item()
         self.log_dict(logs, sync_dist=True)
         return {'loss': loss}
 
-    def sample_images(self):
+    def visualize(self):
         if self.sample_num % (len(self.val_iter) - 1) == 0:
             self.val_iter = iter(self.datamodule.val_dataloader())
         self.sample_num += 1
 
         batch = next(self.val_iter)
-        ls = torch.arange(self.args.n_samples)
-        batch_img = batch['image'][ls].to(self.device)
+        batch_img = batch['image'][:self.args.n_samples].to(self.device)
         text_token = batch.get('text_token', None)
         if text_token is not None:
-            text_token = text_token[ls]
-        # mask_gt = batch['mask'][ls]
-        out = self.model.forward(batch_img, text_token=text_token, sigma=0, tau=self.tau, visualize=True)
-        m1 = out['attns']
-        m2 = out.get('loss_attns', None)
+            text_token = text_token[:self.args.n_samples].to(self.device)
+        out = self.model.forward(batch_img, text_token=text_token, visualize=True)
         recon = out['recon']
         if self.args.img_normalize:
             batch_img = to_rgb_from_tensor(batch_img, self.mean.to(self.device), self.std.to(self.device))
             recon = to_rgb_from_tensor(recon, self.mean.to(self.device), self.std.to(self.device))
-        out = torch.cat(
-                [
-                    batch_img.unsqueeze(1),  # original images
-                    recon.unsqueeze(1),  # reconstructions
-                ],
-                dim=1,
-            ).cpu().clamp(0, 1)
-
-        m_i1 = (m1 * batch_img.unsqueeze(1) + 1 - m1).cpu() # [B, K, C, H, W]
-        out = torch.cat([out, m_i1], dim=1) # add masks
-        if m2 is not None:
-            m_i2 = (m2 * batch_img.unsqueeze(1) + 1 - m2).cpu() # [B, K, C, H, W]
-            out = torch.cat([out, m_i2], dim=1) # add masks
-        # out = torch.cat([out, mask_gt.unsqueeze(1).expand(-1, -1, 3, -1, -1).cpu()], dim=1) # add gt masks
-
-        # shape of out: [N, K, C, H, W]
-        batch_size, C, H, W = batch_img.shape
-        images = vutils.make_grid(
-            out.reshape(out.shape[0] * out.shape[1], C, H, W), normalize=False, nrow=out.shape[1],
-            padding=3, pad_value=0,
-        )
-
-        return images
+        batch_img = batch_img.cpu().clamp(0, 1)
+        recon = recon.cpu().clamp(0, 1)
+        mask = out['masks'].argmax(dim=1).squeeze().cpu().numpy()     
+        return {
+            'img': batch_img,
+            'recon': recon,
+            'mask': mask,
+            # 'mask_gt': batch['mask'][:self.args.n_samples].squeeze().cpu().numpy(),
+        }
 
     def validation_step(self, batch, batch_idx):
         if self.empty_cache:
@@ -101,76 +77,28 @@ class SlotAttentionMethod(pl.LightningModule):
 
         batch_img = batch['image']
         text_token = batch.get('text_token', None)
-        out = self.model.forward(batch_img, text_token=text_token, sigma=self.sigma, tau=self.tau)
+        out = self.model.forward(batch_img, text_token=text_token)
         loss_dict = out['loss']
-        masks = out['attns'] 
+        masks = out['masks'] 
         output = {}
         for k, v in loss_dict.items():
             output[k] = v
-        if self.evaluator != 'none':
+        if self.evaluator != None:
             masks_gt = batch['mask'] # [B, 1, H, W] 
-        if self.evaluator == 'ari':
-            m = masks.detach().argmax(dim=1)
-            ari, _ = average_ari(m, masks_gt)
-            ari_fg, _ = average_ari(m, masks_gt, True)
-            msc_fg, _ = average_segcover(masks_gt, m, True)
-            output['ARI'] = ari.to(self.device)
-            output['ARI_FG'] = ari_fg.to(self.device)
-            output['MSC_FG'] = msc_fg.to(self.device)
-        elif self.evaluator == 'iou':
-            K = masks.shape[1]
-            m = F.one_hot(masks.argmax(dim=1), K).permute(0, 4, 1, 2, 3) # (B, K, 1, H, W)
-            iou, dice = iou_and_dice(m[:, 0], masks_gt)
-            for i in range(1, K):
-                iou1, dice1 = iou_and_dice(m[:, i], masks_gt)
-                iou = torch.max(iou, iou1)
-                dice = torch.max(dice, dice1)
-            output['IoU'] = iou.mean()
-            output['Dice'] = dice.mean()
-        elif self.evaluator == "ap":
-            masks = masks.detach().cpu()[:, :, 0, :, :]           # (B, K, 1, H, W) -> (B, K, H, W)
-            pred_mask_conf, _ = masks.max(dim=1)
-            confidence_mask = (pred_mask_conf > 0.5)
-            pred_mask_oh = masks.argmax(dim=1)                    # (B, K, H, W) -> (B, H, W)
-            gt_mask_oh = masks_gt[:, 0, :, :].detach().cpu()               # (B, 1, H, W) -> (B, H, W)                   
-            gt_fg_batch = (gt_mask_oh != 0)
-            self.seg_metric_logger.update_new_batch(
-                pred_mask_batch=pred_mask_oh,
-                gt_mask_batch=gt_mask_oh,
-                valid_pred_batch=confidence_mask,
-                gt_fg_batch=gt_fg_batch,
-                pred_conf_mask_batch=pred_mask_conf
-            )
-        elif self.evaluator == 'mbo':
-            K = masks.shape[1]
-            m = F.one_hot(masks.argmax(dim=1), K).permute(0, 4, 1, 2, 3).squeeze(2) # (B, K, H, W)
-            mBO, mOR = mean_best_overlap(m, masks_gt)
-            output['mBO'] = mBO.mean()
-            output['mOR'] = mOR.mean()
+            metrics = self.evaluator(masks, masks_gt)
+            output.update(metrics)
         return output
 
     def validation_epoch_end(self, outputs):
         self.empty_cache = True
-        if self.evaluator != "ap":
-            keys = outputs[0].keys()
-            logs = {}
-            for k in keys:
-                v = torch.stack([x[k] for x in outputs]).mean()
-                logs['avg_' + k] = v
-            self.log_dict(logs, sync_dist=True)
-            print("; ".join([f"{k}: {v.item():.6f}" for k, v in logs.items()]))
-        else:
-            outputs = self.seg_metric_logger.calculate_score_summary()
-            keys = outputs.keys()
-            logs = {}
-            for k in keys:
-                if k not in ['AP@05','PQ','F1','precision','recall']:
-                    continue
-                v = outputs[k]
-                logs['avg_' + k] = v
-            self.log_dict(logs, sync_dist=True)
-            print("; ".join([f"{k}: {v:.6f}" for k, v in logs.items()]))
-            self.seg_metric_logger.reset()
+        keys = outputs[0].keys()
+        logs = {}
+        for k in keys:
+            v = torch.stack([x[k] for x in outputs]).mean()
+            logs['val_' + k] = v
+        self.log_dict(logs, sync_dist=True)
+        print("; ".join([f"{k}: {v.item():.6f}" for k, v in logs.items()]))
+        
 
     def test_step(self, batch, batch_idx):
         if self.empty_cache:
@@ -179,87 +107,49 @@ class SlotAttentionMethod(pl.LightningModule):
 
         batch_img = batch['image']
         text_token = batch.get('text_token', None)
-        out = self.model.forward(batch_img, text_token=text_token, sigma=0)
+        out = self.model.forward(batch_img, text_token=text_token)
         loss_dict = out['loss']
-        masks = out['attns'] 
-        # masks = out['cross_attns'] 
+        masks = out['masks'] 
         output = {}
         for k, v in loss_dict.items():
             output[k] = v
-        if self.evaluator != 'none':
+        if self.evaluator != None:
             masks_gt = batch['mask'] # [B, 1, H, W] 
-        if self.evaluator == 'ari':
-            m = masks.detach().argmax(dim=1)
-            ari, _ = average_ari(m, masks_gt)
-            ari_fg, _ = average_ari(m, masks_gt, True)
-            msc_fg, _ = average_segcover(masks_gt, m, True)
-            output['ARI'] = ari.to(self.device)
-            output['ARI_FG'] = ari_fg.to(self.device)
-            output['MSC_FG'] = msc_fg.to(self.device)
-        elif self.evaluator == 'iou':
-            K = masks.shape[1]
-            m = F.one_hot(masks.argmax(dim=1), K).permute(0, 4, 1, 2, 3)
-            iou, dice = iou_and_dice(m[:, 0], masks_gt)
-            for i in range(1, K):
-                iou1, dice1 = iou_and_dice(m[:, i], masks_gt)
-                iou = torch.max(iou, iou1)
-                dice = torch.max(dice, dice1)
-            output['IoU'] = iou.mean()
-            output['Dice'] = dice.mean()
-        elif self.evaluator == "ap":
-            masks = masks.detach()[:, :, 0, :, :]           # (B, K, 1, H, W) -> (B, K, H, W)
-            pred_mask_conf, _ = masks.max(dim=1)
-            confidence_mask = (pred_mask_conf > 0.5)
-            pred_mask_oh = masks.argmax(dim=1)                    # (B, K, H, W) -> (B, H, W)
-            gt_mask_oh = masks_gt[:, 0, :, :].detach()     # (B, 1, H, W) -> (B, H, W)                   
-            gt_fg_batch = (gt_mask_oh != 0)
-            self.seg_metric_logger.update_new_batch(
-                pred_mask_batch=pred_mask_oh,
-                gt_mask_batch=gt_mask_oh,
-                valid_pred_batch=confidence_mask,
-                gt_fg_batch=gt_fg_batch,
-                pred_conf_mask_batch=pred_mask_conf
-            )
-        elif self.evaluator == 'mbo':
-            K = masks.shape[1]
-            m = F.one_hot(masks.argmax(dim=1), K).permute(0, 4, 1, 2, 3).squeeze(2) # (B, K, H, W)
-            mBO, mOR = mean_best_overlap(m, masks_gt)
-            output['mBO'] = mBO.mean()
-            output['mOR'] = mOR.mean()
+            metrics = self.evaluator(masks, masks_gt)
+            output.update(metrics)
         return output
 
     def test_epoch_end(self, outputs):
         self.empty_cache = True
-        if self.evaluator != "ap":
-            keys = outputs[0].keys()
-            logs = {}
-            for k in keys:
-                v = torch.stack([x[k] for x in outputs]).mean()
-                logs['avg_' + k] = v
-            self.log_dict(logs, sync_dist=True)
-            print("; ".join([f"{k}: {v.item():.6f}" for k, v in logs.items()]))
-        else:
-            outputs = self.seg_metric_logger.calculate_score_summary()
-            keys = outputs.keys()
-            logs = {}
-            for k in keys:
-                if k not in ['AP@05','PQ','F1','precision','recall']:
-                    continue
-                v = outputs[k]
-                logs['avg_' + k] = v
-            self.log_dict(logs, sync_dist=True)
-            print("outcomes:")
-            for k in ['AP@05','PQ','F1','precision','recall']:
-                v = logs['avg_' + k] * 100
-                print(f'{v:.2f}')
-            self.seg_metric_logger.reset()
-
+        keys = outputs[0].keys()
+        logs = {}
+        for k in keys:
+            v = torch.stack([x[k] for x in outputs]).mean()
+            logs['test_' + k] = v
+        self.log_dict(logs, sync_dist=True)
+        print("; ".join([f"{k}: {v.item():.6f}" for k, v in logs.items()]))
 
     def configure_optimizers(self):
+        params_other = []
+        params_img_enc = []
+        params_text_enc = []
+        for name, p in self.model.named_parameters():
+            if 'backbone' in name:
+                params_img_enc.append(p)
+            elif 'text_enc' in name:
+                params_text_enc.append(p)
+            else:
+                params_other.append(p)
+        
         params = [
-        {'params': (x[1] for x in self.model.named_parameters() if 'backbone' not in x[0] and 'clip' not in x[0]), 'lr': self.args.lr},
-        ]
-        optimizer = optim.Adam(params)
+            {'params': params_other, 'lr': self.args.lr},
+            ]
+        if not self.args.freeze_img_enc:
+            params.append({'params': params_img_enc, 'lr': self.args.lr * 0.001})
+        if not self.args.freeze_text_enc:
+            params.append({'params': params_text_enc, 'lr': self.args.lr * 0.001})
+
+        optimizer = optim.AdamW(params, weight_decay=self.args.weight_decay)
         
         warmup_steps = self.args.warmup_steps
         decay_steps = self.args.decay_steps

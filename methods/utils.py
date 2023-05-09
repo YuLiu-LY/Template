@@ -36,33 +36,52 @@ class ImageLogCallback(Callback):
         if trainer.logger:
             with torch.no_grad():
                 pl_module.eval()
-                images = pl_module.sample_images()
-                trainer.logger.experiment.log({"images": [wandb.Image(images)]}) # wandb
-                # trainer.logger.experiment.add_image('images', images, trainer.global_step) # tensorboard
-    
+                out = pl_module.visualize()
+                self.log_img(out, trainer)
+                
     def on_test_epoch_end(self, trainer: Trainer, pl_module):
         """Called when the test epoch ends."""
 
         if trainer.logger:
             with torch.no_grad():
                 pl_module.eval()
-                images = pl_module.sample_images()
-                trainer.logger.experiment.log({"images": [wandb.Image(images)]})
-                # trainer.logger.experiment.add_image('images', images, trainer.global_step)
-        
+                out = pl_module.visualize()
+                self.log_img(out, trainer)
+
+    def log_img(self, out, trainer):
+        img = out['img']
+        recon = out['recon']
+        mask = out['mask']
+        # mask_gt = out['mask_gt']
+        table = wandb.Table(columns=[
+            "img", 
+            "recon", 
+            "mask", 
+            # "mask_gt",
+        ])
+        for i in range(len(img)):
+            table.add_data(wandb.Image(img[i]), 
+                wandb.Image(recon[i]), 
+                wandb.Image(img[i], masks={
+                    "prediction" : {
+                        "mask_data" : mask[i],
+                        # "class_labels" : class_labels
+                        },
+                    }
+                ), 
+                # wandb.Image(img[i], masks={
+                #     "prediction" : {
+                #         "mask_data" : mask_gt[i],
+                #         # "class_labels" : class_labels
+                #         },
+                #     }
+                # ), 
+            )
+        trainer.logger.experiment.log({"Table": table})
+
 
 def to_rgb_from_tensor(x, mean=[0, 0, 0], std=[1, 1, 1]):
     return x * std + mean
-
-
-def set_random_seed(seed):
-    """ set random seeds for all possible random libraries"""
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
     
 
 def state_dict_ckpt(path, device='cpu'):
@@ -327,3 +346,38 @@ def gru_cell(input_size, hidden_size, bias=True):
         nn.init.zeros_(m.bias_hh)
     
     return m
+
+
+class Evaluator(object):
+    
+    def __init__(self, evaluator):
+        
+        self.evaluator = evaluator
+        self.reset()
+    
+    
+    def reset(self):
+        
+        self.loss = 0.
+        self.acc = 0.
+        self.n = 0
+    
+    
+    def evaluate(self):
+        
+        self.reset()
+        
+        self.model.eval()
+        
+        with torch.no_grad():
+            for batch in self.dataloader:
+                batch = tuple(t.to(self.device) for t in batch)
+                loss, acc = self.model(*batch)
+                self.loss += loss.item()
+                self.acc += acc.item()
+                self.n += 1
+        
+        self.loss /= self.n
+        self.acc /= self.n
+        
+        return self.loss, self.acc
