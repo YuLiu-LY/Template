@@ -11,6 +11,9 @@ test.py
 *.pth
 # tensorboard
 events.*
+# runs
+runs/*
 # wandb
-results/*/wandb/*
-
+wandb/*
+# data
+data/*
