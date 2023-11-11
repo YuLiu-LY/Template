@@ -45,7 +45,7 @@ class LightingModel(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=1e-4)
+        optimizer = optim.Adam(self.model.parameters(), lr=1e-4)
         return optimizer
 
 lighting_model = LightingModel()

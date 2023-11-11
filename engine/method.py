@@ -21,6 +21,7 @@ from dataset import make_dataset
 class Method(pl.LightningModule):
     def __init__(self, cfg):
         super().__init__()
+        self.save_hyperparameters(cfg)
         self.model = make_model(cfg.model)
         self.train_set, self.val_set, self.test_set = make_dataset(cfg.dataset)
         self.cfg = cfg.training
@@ -52,29 +53,26 @@ class Method(pl.LightningModule):
         if self.logger is not None:
             self.logger.log_image(key=f"Recon", images=[grid])
         
-        # mask = torch.randint(0, 2, size=[B, H, W]).numpy()
-        # mask_gt = torch.randint(0, 2, size=[B, H, W]).numpy()
-        # table = wandb.Table(columns=[
-        #     "img", 
-        #     "recon", 
-        #     "segmentation", 
-        # ])
-        # for i in range(len(img)):
-        #     table.add_data(wandb.Image(img[i]), 
-        #         wandb.Image(recon[i]), 
-        #         wandb.Image(img[i], masks={
-        #             "prediction" : {
-        #                 "mask_data" : mask[i],
-        #                 # "class_labels" : class_labels
-        #                 },
-        #             "ground_truth" : {
-        #                 "mask_data" : mask_gt[i],
-        #                 # "class_labels" : class_labels
-        #             }
-        #         }), 
-        #     )
-        # if self.logger is not None:
-        #     self.logger.experiment.log({"Recon": table})
+            # mask = torch.randint(0, 2, size=[B, H, W]).numpy()
+            # mask_gt = torch.randint(0, 2, size=[B, H, W]).numpy()
+            # table = wandb.Table(columns=["img", "recon", "seg", 
+            #                          ])
+            # for i in range(len(img)):
+            #     table.add_data(
+            #         wandb.Image(img[i]), 
+            #         wandb.Image(recon[i]), 
+            #         wandb.Image(img[i], masks={
+            #                 "prediction" : {
+            #                     "mask_data" : mask[i],
+            #                     # "class_labels" : class_labels
+            #                     },
+            #                 "ground_truth" : {
+            #                     "mask_data" : mask_gt[i],
+            #                     # "class_labels" : class_labels
+            #                 }
+            #             })
+            #     )
+            # self.logger.experiment.log({f"Seg": table})
 
     def evaluate(self, batch):
         batch_img = batch['image']
@@ -166,7 +164,7 @@ class Method(pl.LightningModule):
     
     def on_train_epoch_start(self):
         torch.cuda.empty_cache()
-
+        
     def on_validation_epoch_start(self):
         torch.cuda.empty_cache()
         self.metrics = {

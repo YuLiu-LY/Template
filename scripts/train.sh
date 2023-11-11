@@ -1,5 +1,5 @@
 dataset=cifar10
-export CUDA_VISIBLE_DEVICES=0,1
+export CUDA_VISIBLE_DEVICES=2,3
 source ~/anaconda3/bin/activate light
 python engine/main.py \
     dataset=${dataset} \
