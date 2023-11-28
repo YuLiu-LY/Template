@@ -1,5 +1,5 @@
 # Training arguments
-  logger: wandb
+  logger:
 ## Wandb
   project: cifar10  # project name
   exp_name: debug      # experiment name
@@ -23,9 +23,10 @@
   profiler:  # use profiler to check time bottleneck
   benchmark: true
   deterministic: false
+  resume:
 ## Others
   log_path: runs/cifar10
-  monitor: val/psnr
+  monitor: val/acc
   num_vis: 8
   num_workers: 4
   batch_size: 64

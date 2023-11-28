@@ -1,0 +1,40 @@
+# Training arguments
+  logger:
+## Wandb
+  project: cifar10  # project name
+  exp_name: debug      # experiment name
+  entity:             # username or teamname where you're sending runs
+  group:              # experiment groupname
+  job_type: debug          # train / test / debug ...
+  tags:               # tags for this run
+  id:                 # unique Id for this run
+  notes:              # notes for this run
+  watch_model: false  # true for logging the gradient of parameters
+## Lightning trainer
+  seed: 42
+  max_steps: 25000
+  max_epochs: 100000
+  train_percent: 1.0 
+  val_percent: 1.0     # val_batchs = val_check_percent * val_batchs if val_batchs < 1 else val_batchs
+  test_percent: 1.0
+  val_check_interval: 1  # do validation every val_check_interval epochs. It could be less than 1
+  grad_clip: 1.0
+  precision: 32
+  profiler:  # use profiler to check time bottleneck
+  benchmark: true
+  deterministic: false
+  resume:
+## Others
+  log_path: runs/cifar10
+  monitor: val/acc
+  num_vis: 8
+  num_workers: 4
+  batch_size: 64
+  freeze_enc: false
+  freeze_dec: false
+# Optimizer arguments
+  lr: 4e-4
+  min_lr_factor: 1e-3
+  weight_decay: 1e-4
+  warmup_steps: 10000
+  decay_steps: 5000

@@ -1,10 +1,9 @@
-resume:
 ckpt_path:
 watch_model: false
 defaults:
   - dataset: cifar10
   - model: my
-  - training: cifar10
+  - training: my_cifar10
 
 hydra:
   output_subdir: null # Disable saving of config files. We'll do that ourselves.

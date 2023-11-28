@@ -1,5 +1,5 @@
-import wandb
 import torch
+import wandb
 from tabulate import tabulate
 import pytorch_lightning as pl
 from pytorch_lightning.utilities import rank_zero_only
@@ -27,11 +27,15 @@ class Method(pl.LightningModule):
         self.cfg = cfg.training
 
         self.vis_stride = len(self.val_set) // self.cfg.num_vis
+        self.num_vis = self.cfg.num_vis
+        
+        self.loss = torch.nn.CrossEntropyLoss()
 
     def training_step(self, batch, batch_idx):
         batch_img = batch['image']
-        recon = self.model(batch_img)
-        loss = F.mse_loss(recon, batch_img, reduction='mean')
+        label = batch['label'] # [B]
+        logits = self.model(batch_img) # [B, C]
+        loss = self.loss(logits, label)
         self.log("train/loss", loss, on_step=True, on_epoch=False, 
                  prog_bar=True, logger=True, sync_dist=True)
         return loss
@@ -41,47 +45,30 @@ class Method(pl.LightningModule):
         r'''
         out: a dict containing the following keys:
             img: [B, 3, H, W]
-            recon: [B, 3, H, W]
-            mask: [B, 1, H, W]
-            mask_gt: [B, 1, H, W]
+            pred: [B, C] (probabilities)
         '''
         img = out['img']
-        B, _, H, W  = img.shape
-        recon = out['recon']
-        stack = torch.stack([img, recon], dim=1).reshape(-1, *img.shape[1:])
-        grid = make_grid(stack, nrow=2, padding=3, pad_value=0)
-        if self.logger is not None:
-            self.logger.log_image(key=f"Recon", images=[grid])
+        pred = out['pred']
         
-            # mask = torch.randint(0, 2, size=[B, H, W]).numpy()
-            # mask_gt = torch.randint(0, 2, size=[B, H, W]).numpy()
-            # table = wandb.Table(columns=["img", "recon", "seg", 
-            #                          ])
-            # for i in range(len(img)):
-            #     table.add_data(
-            #         wandb.Image(img[i]), 
-            #         wandb.Image(recon[i]), 
-            #         wandb.Image(img[i], masks={
-            #                 "prediction" : {
-            #                     "mask_data" : mask[i],
-            #                     # "class_labels" : class_labels
-            #                     },
-            #                 "ground_truth" : {
-            #                     "mask_data" : mask_gt[i],
-            #                     # "class_labels" : class_labels
-            #                 }
-            #             })
-            #     )
-            # self.logger.experiment.log({f"Seg": table})
-
+        if self.logger is not None:
+            grid = make_grid(img, nrow=1, normalize=True, scale_each=True)
+            self.logger.experiment.log({"Image": wandb.Image(grid)})
+            for i in range(len(img)):
+                prob_table = wandb.Table(columns=["Class", "Prob"], data=[[f"{i}", f"{p.item():.2f}"] for i, p in enumerate(pred[i])])
+                self.logger.experiment.log({f"Image/{i:04d}": wandb.Image(img[i]),
+                                            f"Prediction/{i:04d}": wandb.plot.bar(prob_table, "Class", "Prob", title=f"Prediction/{i:04d}"),
+                                            })
+        
     def evaluate(self, batch):
         batch_img = batch['image']
-        recon = self.model(batch_img)
-        loss = F.mse_loss(recon, batch_img, reduction='mean')
-        psnr = 10 * torch.log10(1 / loss)
-        self.metrics['psnr'].append(psnr)
+        logits = self.model(batch_img) # [B, C]
+        loss = self.loss(logits, batch['label'])
+        pred = torch.argmax(logits, dim=1)
+        acc = (pred == batch['label']).float().mean()
+        self.metrics['acc'].append(acc)
+        self.metrics['loss'].append(loss)
         self.outputs['img'].append(batch_img)
-        self.outputs['recon'].append(recon)
+        self.outputs['pred'].append(F.softmax(logits, dim=-1))
 
     def validation_step(self, batch, batch_idx):
         self.evaluate(batch)
@@ -99,8 +86,8 @@ class Method(pl.LightningModule):
         print(tabulate(table, headers='firstrow', tablefmt='fancy_grid'))
         outputs = {}
         for k, v in self.outputs.items():
-            outputs[k] = torch.cat(v)[::self.vis_stride]
-        # self.visualize(outputs)
+            outputs[k] = torch.cat(v)[::self.vis_stride][:self.num_vis]
+        self.visualize(outputs)
 
     def test_step(self, batch, batch_idx):
         self.evaluate(batch)
@@ -118,13 +105,14 @@ class Method(pl.LightningModule):
         print(tabulate(table, headers='firstrow', tablefmt='fancy_grid'))
         outputs = {}
         for k, v in self.outputs.items():
-            outputs[k] = torch.cat(v[self.visualize_indices])
+            outputs[k] = torch.cat(v)[::self.vis_stride][:self.num_vis]
         self.visualize(outputs)
 
     def configure_optimizers(self):
         warmup_steps = self.cfg.warmup_steps
         decay_steps = self.cfg.decay_steps
         min_lr_factor = self.cfg.min_lr_factor
+
         def lr_warmup_exp_decay(step: int):
             factor = min(1, step / (warmup_steps + 1e-6))
             decay_factor = 0.5 ** (step / decay_steps)
@@ -133,6 +121,7 @@ class Method(pl.LightningModule):
             decay_factor = 0.5 ** (step / decay_steps)
             return decay_factor * (1 - min_lr_factor) + min_lr_factor
         
+        # separate params
         params_enc = []
         params_dec = []
         params_other = []
@@ -168,21 +157,23 @@ class Method(pl.LightningModule):
     def on_validation_epoch_start(self):
         torch.cuda.empty_cache()
         self.metrics = {
-            'psnr': []
+            'loss': [],
+            'acc': [],
         }
         self.outputs = {
             'img': [],
-            'recon': [],
+            'pred': [],
         }
 
     def on_test_epoch_start(self):
         torch.cuda.empty_cache()
         self.metrics = {
-            'psnr': []
+            'loss': [],
+            'acc': [],
         }
         self.outputs = {
             'img': [],
-            'recon': [],
+            'pred': [],
         }
 
     def train_dataloader(self):

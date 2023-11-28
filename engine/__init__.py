@@ -2,25 +2,27 @@ from pathlib import Path
 import datetime
 
 import torch
-import wandb
 from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, ModelSummary
 from pytorch_lightning.loggers import WandbLogger
-
 from utils.filelogger import FilesystemLogger
 
 
 def generate_exp_name(cfg):
-    return f"{cfg.exp_name}_{datetime.datetime.now().strftime('%m%d%H%M')}"
+    if cfg.resume is not None:
+        return Path(cfg.resume).parents[1].name
+    else:
+        return f"{cfg.exp_name}_{datetime.datetime.now().strftime('%m%d%H%M')}"
 
 def create_trainer(cfg):
-    cfg.exp_name = generate_exp_name(cfg)
+    cfg.training.exp_name = generate_exp_name(cfg.training)
+    filesystem_logger = FilesystemLogger(cfg)
+    cfg = cfg.training
     if cfg.val_check_interval > 1:
         cfg.val_check_interval = int(cfg.val_check_interval)
     seed_everything(cfg.seed, workers=True)
 
     # save code files
-    filesystem_logger = FilesystemLogger(cfg)
     if cfg.logger == 'wandb':
         logger = WandbLogger(
             project=cfg.project,
@@ -31,18 +33,20 @@ def create_trainer(cfg):
             tags=cfg.tags,
             notes=cfg.notes,
             id=cfg.exp_name, 
-            # settings=wandb.Settings(start_method='thread')
         )
     else:
         logger = False
 
     checkpoint_callback = ModelCheckpoint(dirpath=(Path(cfg.log_path) / cfg.exp_name / "checkpoints"),
                                           monitor=cfg.monitor,
-                                          save_top_k=3,
+                                          save_top_k=1,
                                           save_last=True,
                                           mode='max',
                                           )
-    callbacks = [LearningRateMonitor("step"),  checkpoint_callback, ModelSummary(max_depth=2)] if logger else []
+    callbacks = [checkpoint_callback, ModelSummary(max_depth=2)]
+    if logger:
+        callbacks.append(LearningRateMonitor('step'))
+
     gpu_count = torch.cuda.device_count()
     if cfg.job_type == 'debug':
         cfg.train_percent = 15

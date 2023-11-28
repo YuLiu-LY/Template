@@ -1,2 +1,4 @@
 model_name: my
+num_classes: 10 
 hid_dim: 64
+num_blocks: 4

@@ -1,7 +1,8 @@
-from .auto_encoder import MyModel
+from .classifier import ResModel, MyModel
 
 
 models_dict = {
+    'resnet': ResModel,
     'my': MyModel,
 }
 

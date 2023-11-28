@@ -41,7 +41,7 @@ class FilesystemLogger(Logger):
     def experiment(self):
         if self._experiment is None:
             self._experiment = DummyExperiment()
-            experiment_dir = Path(self.experiment_config["log_path"], self.experiment_config["exp_name"])
+            experiment_dir = Path(self.experiment_config["training"]["log_path"], self.experiment_config["training"]["exp_name"])
             experiment_dir.mkdir(exist_ok=True, parents=True)
 
             src_folders = ['configs', 'model', 'dataset', 'engine', 'utils']

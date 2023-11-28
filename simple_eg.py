@@ -53,7 +53,6 @@ train_loader = utils.data.DataLoader(CIFAR10('data/', download=True, transform=T
 trainer = pl.Trainer(
     accelerator='gpu', 
     devices=1, 
-    strategy='ddp', 
     max_steps=100, 
     )
 trainer.fit(model=lighting_model, train_dataloaders=train_loader)
