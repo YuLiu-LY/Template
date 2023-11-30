@@ -1,10 +1,28 @@
 from torchvision.datasets import CIFAR10
 from torchvision.transforms import ToTensor
+from torchvision.transforms import transforms
 
 
 class MyDataset(CIFAR10):
     def __init__(self, cfg, split='train'):
-        super().__init__(cfg.data_root, train=(split=='train'), download=True, transform=ToTensor())
+        if split == 'train':
+            transform = transforms.Compose([
+                transforms.RandomResizedCrop(32, scale=(0.8, 1.0)),
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomGrayscale(p=0.2),
+                transforms.RandomApply([transforms.ColorJitter(0.3, 0.15, 0.1, 0.1)], p=0.5),
+                transforms.RandomApply([transforms.GaussianBlur(31, 2)], p=0.5),
+                ToTensor(),
+                transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+                                        std=[0.2470, 0.2435, 0.2616]),
+            ])
+        else:
+            transform = transforms.Compose([
+                ToTensor(),
+                transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+                                        std=[0.2470, 0.2435, 0.2616]),
+            ])
+        super().__init__(cfg.data_root, train=(split=='train'), download=True, transform=transform)
 
     def __getitem__(self, index):
         img, label = super().__getitem__(index)
@@ -16,7 +34,6 @@ import numpy as np
 from PIL import Image
 from glob import glob
 from torch.utils.data import Dataset
-from torchvision.transforms import transforms
 
 
 class CostumDataset(Dataset):

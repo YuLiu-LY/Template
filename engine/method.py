@@ -138,10 +138,10 @@ class Method(pl.LightningModule):
             ]
         lr_lambda_list = [lr_exp_decay]
         if not self.cfg.freeze_enc:
-            params.append({'params': params_enc, 'lr': self.cfg.lr * 0.1, 'weight_decay': self.cfg.weight_decay})
+            params.append({'params': params_enc, 'lr': self.cfg.lr, 'weight_decay': self.cfg.weight_decay})
             lr_lambda_list.append(lr_warmup_exp_decay)
         if not self.cfg.freeze_dec:
-            params.append({'params': params_dec, 'lr': self.cfg.lr * 0.1, 'weight_decay': self.cfg.weight_decay})
+            params.append({'params': params_dec, 'lr': self.cfg.lr, 'weight_decay': self.cfg.weight_decay})
             lr_lambda_list.append(lr_warmup_exp_decay)
 
         opt = optim.AdamW(params)

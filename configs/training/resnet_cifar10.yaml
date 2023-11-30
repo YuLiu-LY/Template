@@ -36,5 +36,5 @@
   lr: 4e-4
   min_lr_factor: 1e-3
   weight_decay: 1e-4
-  warmup_steps: 10000
-  decay_steps: 5000
+  warmup_steps: 100
+  decay_steps: 500
